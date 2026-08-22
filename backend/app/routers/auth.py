@@ -1,14 +1,28 @@
+from datetime import datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.security import create_access_token, verify_password
+from app.core.config import settings
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    hash_refresh_token,
+    verify_password,
+)
 from app.crud.user import (
+    create_refresh_token as save_refresh_token,
     create_user,
     get_user_by_email,
     get_user_by_username,
 )
 from app.db.database import get_db
-from app.schemas.user import Token, UserCreate, UserLogin, UserResponse
+from app.schemas.user import (
+    Token,
+    UserCreate,
+    UserLogin,
+    UserResponse,
+)
 
 
 router = APIRouter(
@@ -90,11 +104,37 @@ def login(
             detail="User account is inactive",
         )
 
+    # Access token
     access_token = create_access_token(
         str(user.id)
     )
 
+    # Raw refresh token
+    refresh_token = create_refresh_token()
+
+    # Hash refresh token before storing it
+    token_hash = hash_refresh_token(
+        refresh_token
+    )
+
+    # Refresh token expiration
+    expires_at = (
+        datetime.utcnow()
+        + timedelta(
+            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+        )
+    )
+
+    # Store only the hash in PostgreSQL
+    save_refresh_token(
+        db=db,
+        user_id=user.id,
+        token_hash=token_hash,
+        expires_at=expires_at,
+    )
+
     return {
         "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer",
     }
