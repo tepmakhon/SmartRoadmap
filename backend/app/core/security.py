@@ -48,6 +48,25 @@ def create_access_token(
         algorithm=settings.JWT_ALGORITHM,
     )
 
+def decode_access_token(token: str) -> int:
+    try:
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+        )
+    except jwt.PyJWTError:
+        raise ValueError("Invalid or expired access token")
+
+    subject = payload.get("sub")
+
+    if subject is None:
+        raise ValueError("Invalid access token")
+
+    try:
+        return int(subject)
+    except (TypeError, ValueError):
+        raise ValueError("Invalid access token")
 
 def create_refresh_token() -> str:
     return secrets.token_urlsafe(64)

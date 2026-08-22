@@ -10,14 +10,22 @@ from app.core.security import (
     hash_refresh_token,
     verify_password,
 )
+
 from app.crud.user import (
     create_refresh_token as save_refresh_token,
     create_user,
+    get_refresh_token,
     get_user_by_email,
+    get_user_by_id,
     get_user_by_username,
 )
+
 from app.db.database import get_db
+
 from app.schemas.user import (
+    AccessTokenResponse,
+    LogoutRequest,
+    RefreshTokenRequest,
     Token,
     UserCreate,
     UserLogin,
@@ -125,7 +133,7 @@ def login(
         )
     )
 
-    # Store only the hash in PostgreSQL
+    # Store only the hash
     save_refresh_token(
         db=db,
         user_id=user.id,
@@ -137,4 +145,106 @@ def login(
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
+    }
+
+
+@router.post(
+    "/refresh",
+    response_model=AccessTokenResponse,
+)
+def refresh_access_token(
+    token_data: RefreshTokenRequest,
+    db: Session = Depends(get_db),
+):
+    # Hash the raw refresh token from the client
+    token_hash = hash_refresh_token(
+        token_data.refresh_token
+    )
+
+    # Find the stored token
+    refresh_token = get_refresh_token(
+        db,
+        token_hash,
+    )
+
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+        )
+
+    # Check whether token was revoked
+    if refresh_token.revoked_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token has been revoked",
+        )
+
+    # Check expiration
+    if refresh_token.expires_at <= datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token has expired",
+        )
+
+    # Find user
+    user = get_user_by_id(
+        db,
+        refresh_token.user_id,
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    # Check account status
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is inactive",
+        )
+
+    # Create new access token
+    access_token = create_access_token(
+        str(user.id)
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+    }
+
+@router.post("/logout")
+def logout(
+    token_data: LogoutRequest,
+    db: Session = Depends(get_db),
+):
+    token_hash = hash_refresh_token(
+        token_data.refresh_token
+    )
+
+    refresh_token = get_refresh_token(
+        db,
+        token_hash,
+    )
+
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+        )
+
+    if refresh_token.revoked_at is not None:
+        return {
+            "message": "Already logged out"
+        }
+
+    refresh_token.revoked_at = datetime.utcnow()
+
+    db.commit()
+
+    return {
+        "message": "Successfully logged out"
     }

@@ -72,7 +72,6 @@ def create_refresh_token(
 
     return refresh_token
 
-
 def get_refresh_token(
     db: Session,
     token_hash: str,
@@ -87,7 +86,10 @@ def get_refresh_token(
 def revoke_refresh_token(
     db: Session,
     refresh_token: RefreshToken,
-) -> None:
+) -> RefreshToken:
     refresh_token.revoked_at = datetime.utcnow()
 
     db.commit()
+    db.refresh(refresh_token)
+
+    return refresh_token
