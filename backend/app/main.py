@@ -4,6 +4,7 @@ from app.routers.database import router as database_router
 from app.routers.health import router as health_router
 from app.routers.auth import router as auth_router
 
+
 app = FastAPI(
     title="Smart Roadmap API",
     description="Backend API for Smart Roadmap",
