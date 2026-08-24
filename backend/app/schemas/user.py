@@ -5,8 +5,14 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 class UserCreate(BaseModel):
     email: EmailStr
-    username: str = Field(min_length=3, max_length=50)
-    password: str = Field(min_length=8, max_length=128)
+    username: str = Field(
+        min_length=3,
+        max_length=50,
+    )
+    password: str = Field(
+        min_length=8,
+        max_length=128,
+    )
     full_name: str | None = Field(
         default=None,
         max_length=100,
@@ -35,6 +41,7 @@ class Token(BaseModel):
     refresh_token: str
     token_type: str
 
+
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
@@ -43,5 +50,22 @@ class AccessTokenResponse(BaseModel):
     access_token: str
     token_type: str
 
+
 class LogoutRequest(BaseModel):
     refresh_token: str
+
+
+class SessionResponse(BaseModel):
+    id: int
+    created_at: datetime
+    expires_at: datetime
+    revoked_at: datetime | None
+    is_active: bool
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(
+        min_length=8,
+        max_length=128,
+    )

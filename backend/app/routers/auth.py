@@ -18,6 +18,7 @@ from app.crud.user import (
     get_user_by_id,
     get_user_by_username,
     revoke_refresh_token,
+    revoke_all_user_refresh_tokens,
 )
 from app.db.database import get_db
 from app.schemas.user import (
@@ -27,7 +28,20 @@ from app.schemas.user import (
     UserResponse,
     RefreshTokenRequest,
     LogoutRequest,
+    ChangePasswordRequest,
 )
+
+from app.core.dependencies import get_current_user
+from app.crud.user import (
+    get_user_refresh_tokens,
+    revoke_user_refresh_token,
+    revoke_all_user_refresh_tokens,
+)
+from app.schemas.user import SessionResponse
+from app.models.user import User
+
+from app.core.security import hash_password
+from app.crud.user import update_user_password
 
 router = APIRouter(
     prefix="/api/v1/auth",
@@ -171,11 +185,15 @@ def refresh_access_token(
 
     # Make sure the token has not already been revoked
     if refresh_token.revoked_at is not None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token has been revoked",
+        revoke_all_user_refresh_tokens(
+            db,
+            refresh_token.user_id,
         )
 
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token reuse detected",
+        )
     # Make sure the token has not expired
     if refresh_token.expires_at <= datetime.utcnow():
         raise HTTPException(
@@ -277,4 +295,114 @@ def logout(
 
     return {
         "message": "Successfully logged out"
+    }
+
+@router.get(
+    "/sessions",
+    response_model=list[SessionResponse],
+)
+def get_sessions(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    tokens = get_user_refresh_tokens(
+        db,
+        current_user.id,
+    )
+
+    now = datetime.utcnow()
+
+    return [
+        SessionResponse(
+            id=token.id,
+            created_at=token.created_at,
+            expires_at=token.expires_at,
+            revoked_at=token.revoked_at,
+            is_active=(
+                token.revoked_at is None
+                and token.expires_at > now
+            ),
+        )
+        for token in tokens
+    ]
+
+@router.delete(
+    "/sessions/{session_id}",
+)
+def revoke_session(
+    session_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    token = revoke_user_refresh_token(
+        db,
+        current_user.id,
+        session_id,
+    )
+
+    if token is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found",
+        )
+
+    return {
+        "message": "Session revoked successfully"
+    }
+
+@router.post(
+    "/sessions/revoke-all",
+)
+def revoke_all_sessions(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    revoked_count = revoke_all_user_refresh_tokens(
+        db,
+        current_user.id,
+    )
+
+    return {
+        "message": "All sessions revoked successfully",
+        "revoked_count": revoked_count,
+    }
+
+@router.post("/change-password")
+def change_password(
+    password_data: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not verify_password(
+        password_data.current_password,
+        current_user.hashed_password,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+    if password_data.current_password == password_data.new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be different from current password",
+        )
+
+    hashed_password = hash_password(
+        password_data.new_password
+    )
+
+    update_user_password(
+        db,
+        current_user,
+        hashed_password,
+    )
+
+    revoke_all_user_refresh_tokens(
+        db,
+        current_user.id,
+    )
+
+    return {
+        "message": "Password changed successfully"
     }

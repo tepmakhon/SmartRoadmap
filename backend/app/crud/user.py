@@ -93,3 +93,88 @@ def revoke_refresh_token(
     db.refresh(refresh_token)
 
     return refresh_token
+
+def revoke_all_user_refresh_tokens(
+    db: Session,
+    user_id: int,
+) -> None:
+    statement = select(RefreshToken).where(
+        RefreshToken.user_id == user_id,
+        RefreshToken.revoked_at.is_(None),
+    )
+
+    tokens = db.scalars(statement).all()
+
+    for token in tokens:
+        token.revoked_at = datetime.utcnow()
+
+    db.commit()
+
+
+def get_user_refresh_tokens(
+    db: Session,
+    user_id: int,
+) -> list[RefreshToken]:
+    statement = (
+        select(RefreshToken)
+        .where(RefreshToken.user_id == user_id)
+        .order_by(RefreshToken.created_at.desc())
+    )
+
+    return list(db.scalars(statement).all())
+
+
+def revoke_user_refresh_token(
+    db: Session,
+    user_id: int,
+    token_id: int,
+) -> RefreshToken | None:
+    statement = select(RefreshToken).where(
+        RefreshToken.id == token_id,
+        RefreshToken.user_id == user_id,
+    )
+
+    refresh_token = db.scalar(statement)
+
+    if refresh_token is None:
+        return None
+
+    if refresh_token.revoked_at is None:
+        refresh_token.revoked_at = datetime.utcnow()
+        db.commit()
+        db.refresh(refresh_token)
+
+    return refresh_token
+
+
+def revoke_all_user_refresh_tokens(
+    db: Session,
+    user_id: int,
+) -> int:
+    statement = select(RefreshToken).where(
+        RefreshToken.user_id == user_id,
+        RefreshToken.revoked_at.is_(None),
+    )
+
+    tokens = list(db.scalars(statement).all())
+
+    now = datetime.utcnow()
+
+    for token in tokens:
+        token.revoked_at = now
+
+    db.commit()
+
+    return len(tokens)
+
+def update_user_password(
+    db: Session,
+    user: User,
+    hashed_password: str,
+) -> User:
+    user.hashed_password = hashed_password
+
+    db.commit()
+    db.refresh(user)
+
+    return user
