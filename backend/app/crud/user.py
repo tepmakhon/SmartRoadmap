@@ -178,3 +178,14 @@ def update_user_password(
     db.refresh(user)
 
     return user
+
+def deactivate_user(
+    db: Session,
+    user: User,
+) -> User:
+    user.is_active = False
+
+    db.commit()
+    db.refresh(user)
+
+    return user
