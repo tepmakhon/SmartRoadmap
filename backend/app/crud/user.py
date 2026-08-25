@@ -7,7 +7,7 @@ from app.core.security import hash_password
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.schemas.user import UserCreate
-
+from app.models.user_profile import UserProfile
 
 def get_user_by_id(
     db: Session,
@@ -213,3 +213,42 @@ def update_user_username(
     db.refresh(user)
 
     return user
+
+def get_user_profile(
+    db: Session,
+    user_id: int,
+) -> UserProfile | None:
+    statement = select(UserProfile).where(
+        UserProfile.user_id == user_id
+    )
+
+    return db.scalar(statement)
+
+def create_user_profile(
+    db: Session,
+    user_id: int,
+    profile_data: dict,
+) -> UserProfile:
+    profile = UserProfile(
+        user_id=user_id,
+        **profile_data,
+    )
+
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+
+    return profile
+
+def update_user_profile(
+    db: Session,
+    profile: UserProfile,
+    profile_data: dict,
+) -> UserProfile:
+    for field, value in profile_data.items():
+        setattr(profile, field, value)
+
+    db.commit()
+    db.refresh(profile)
+
+    return profile

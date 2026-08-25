@@ -4,7 +4,7 @@ from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
-
+from sqlalchemy.orm import relationship
 
 class User(Base):
     __tablename__ = "users"
@@ -56,3 +56,10 @@ class User(Base):
         onupdate=datetime.utcnow,
         nullable=False,
     )
+
+    profile = relationship(
+    "UserProfile",
+    back_populates="user",
+    uselist=False,
+    cascade="all, delete-orphan",
+)

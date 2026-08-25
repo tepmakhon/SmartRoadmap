@@ -80,3 +80,46 @@ class ChangeUsernameRequest(BaseModel):
         min_length=3,
         max_length=50,
     )
+
+class UserProfileUpdate(BaseModel):
+    full_name: str | None = Field(
+        default=None,
+        max_length=100,
+    )
+
+    bio: str | None = Field(
+        default=None,
+        max_length=2000,
+    )
+
+    avatar_url: str | None = Field(
+        default=None,
+        max_length=500,
+    )
+
+    phone: str | None = Field(
+        default=None,
+        max_length=30,
+    )
+
+    date_of_birth: datetime | None = None
+
+    location: str | None = Field(
+        default=None,
+        max_length=150,
+    )
+
+
+class UserProfileResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    full_name: str | None
+    bio: str | None
+    avatar_url: str | None
+    phone: str | None
+    date_of_birth: datetime | None
+    location: str | None
+    created_at: datetime
+    updated_at: datetime

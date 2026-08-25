@@ -4,11 +4,14 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user
 from app.core.security import verify_password
 from app.crud.user import (
+    create_user_profile,
     deactivate_user,
     get_user_by_email,
     get_user_by_username,
+    get_user_profile,
     revoke_all_user_refresh_tokens,
     update_user_email,
+    update_user_profile,
     update_user_username,
 )
 from app.db.database import get_db
@@ -16,6 +19,8 @@ from app.models.user import User
 from app.schemas.user import (
     ChangeEmailRequest,
     ChangeUsernameRequest,
+    UserProfileResponse,
+    UserProfileUpdate,
     UserResponse,
 )
 
@@ -161,3 +166,58 @@ def change_username(
     return {
         "message": "Username changed successfully"
     }
+
+@router.get(
+    "/me/profile",
+    response_model=UserProfileResponse,
+)
+def get_my_profile(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    profile = get_user_profile(
+        db,
+        current_user.id,
+    )
+
+    if not profile:
+        profile = create_user_profile(
+            db,
+            current_user.id,
+            {},
+        )
+
+    return profile
+
+@router.put(
+    "/me/profile",
+    response_model=UserProfileResponse,
+)
+def update_my_profile(
+    profile_data: UserProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    profile = get_user_profile(
+        db,
+        current_user.id,
+    )
+
+    update_data = profile_data.model_dump(
+        exclude_unset=True,
+    )
+
+    if not profile:
+        profile = create_user_profile(
+            db,
+            current_user.id,
+            update_data,
+        )
+    else:
+        profile = update_user_profile(
+            db,
+            profile,
+            update_data,
+        )
+
+    return profile
