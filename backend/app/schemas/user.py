@@ -69,3 +69,14 @@ class ChangePasswordRequest(BaseModel):
         min_length=8,
         max_length=128,
     )
+
+class ChangeEmailRequest(BaseModel):
+    new_email: EmailStr
+    current_password: str
+
+class ChangeUsernameRequest(BaseModel):
+    current_password: str
+    new_username: str = Field(
+        min_length=3,
+        max_length=50,
+    )

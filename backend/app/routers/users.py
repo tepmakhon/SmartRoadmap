@@ -1,17 +1,24 @@
-from fastapi import APIRouter, Depends
-
-from app.core.dependencies import get_current_user
-from app.models.user import User
-from app.schemas.user import UserResponse
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.dependencies import get_current_user
+from app.core.security import verify_password
 from app.crud.user import (
     deactivate_user,
+    get_user_by_email,
+    get_user_by_username,
     revoke_all_user_refresh_tokens,
+    update_user_email,
+    update_user_username,
 )
 from app.db.database import get_db
+from app.models.user import User
+from app.schemas.user import (
+    ChangeEmailRequest,
+    ChangeUsernameRequest,
+    UserResponse,
+)
+
 
 router = APIRouter(
     prefix="/api/v1/users",
@@ -27,6 +34,7 @@ def get_me(
     current_user: User = Depends(get_current_user),
 ):
     return current_user
+
 
 @router.delete("/me")
 def deactivate_account(
@@ -51,4 +59,105 @@ def deactivate_account(
 
     return {
         "message": "Account deactivated successfully"
+    }
+
+
+@router.post("/me/change-email")
+def change_email(
+    email_data: ChangeEmailRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if email_data.new_email == current_user.email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New email must be different from current email",
+        )
+
+    if not verify_password(
+        email_data.current_password,
+        current_user.hashed_password,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+    existing_user = get_user_by_email(
+        db,
+        email_data.new_email,
+    )
+
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email is already registered",
+        )
+
+    update_user_email(
+        db,
+        current_user,
+        email_data.new_email,
+    )
+
+    # Invalidate existing sessions after changing email
+    revoke_all_user_refresh_tokens(
+        db,
+        current_user.id,
+    )
+
+    return {
+        "message": "Email changed successfully"
+    }
+
+@router.post("/me/change-username")
+def change_username(
+    username_data: ChangeUsernameRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Make sure the new username is different
+    if username_data.new_username == current_user.username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New username must be different from current username",
+        )
+
+    # Verify current password
+    if not verify_password(
+        username_data.current_password,
+        current_user.hashed_password,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+    # Check username uniqueness
+    existing_user = get_user_by_username(
+        db,
+        username_data.new_username,
+    )
+
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Username is already taken",
+        )
+
+    # Update username
+    update_user_username(
+        db,
+        current_user,
+        username_data.new_username,
+    )
+
+    # Invalidate all existing refresh sessions
+    revoke_all_user_refresh_tokens(
+        db,
+        current_user.id,
+    )
+
+    return {
+        "message": "Username changed successfully"
     }

@@ -189,3 +189,27 @@ def deactivate_user(
     db.refresh(user)
 
     return user
+
+def update_user_email(
+    db: Session,
+    user: User,
+    new_email: str,
+) -> User:
+    user.email = new_email
+
+    db.commit()
+    db.refresh(user)
+
+    return user
+
+def update_user_username(
+    db: Session,
+    user: User,
+    username: str,
+) -> User:
+    user.username = username
+
+    db.commit()
+    db.refresh(user)
+
+    return user
