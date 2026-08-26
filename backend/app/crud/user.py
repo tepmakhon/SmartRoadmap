@@ -47,11 +47,25 @@ def create_user(
         full_name=user_data.full_name,
     )
 
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    try:
+        db.add(user)
+        db.flush()
 
-    return user
+        profile = UserProfile(
+            user_id=user.id,
+            full_name=user_data.full_name,
+        )
+
+        db.add(profile)
+
+        db.commit()
+        db.refresh(user)
+
+        return user
+
+    except Exception:
+        db.rollback()
+        raise
 
 
 def create_refresh_token(
@@ -97,7 +111,7 @@ def revoke_refresh_token(
 def revoke_all_user_refresh_tokens(
     db: Session,
     user_id: int,
-) -> None:
+) -> int:
     statement = select(RefreshToken).where(
         RefreshToken.user_id == user_id,
         RefreshToken.revoked_at.is_(None),

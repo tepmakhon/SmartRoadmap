@@ -62,4 +62,10 @@ class User(Base):
     back_populates="user",
     uselist=False,
     cascade="all, delete-orphan",
-)
+    )
+
+    user_skills = relationship(
+        "UserSkill",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )

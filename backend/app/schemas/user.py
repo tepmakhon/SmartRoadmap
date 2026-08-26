@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -102,7 +102,7 @@ class UserProfileUpdate(BaseModel):
         max_length=30,
     )
 
-    date_of_birth: datetime | None = None
+    date_of_birth: date | None = None
 
     location: str | None = Field(
         default=None,
@@ -119,7 +119,7 @@ class UserProfileResponse(BaseModel):
     bio: str | None
     avatar_url: str | None
     phone: str | None
-    date_of_birth: datetime | None
+    date_of_birth: date | None
     location: str | None
     created_at: datetime
     updated_at: datetime
