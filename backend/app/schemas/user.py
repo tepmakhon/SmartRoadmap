@@ -2,6 +2,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from enum import Enum
 
 class UserCreate(BaseModel):
     email: EmailStr
@@ -121,5 +122,55 @@ class UserProfileResponse(BaseModel):
     phone: str | None
     date_of_birth: date | None
     location: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProficiencyLevel(str, Enum):
+    beginner = "beginner"
+    intermediate = "intermediate"
+    advanced = "advanced"
+    expert = "expert"
+
+
+class SkillCreate(BaseModel):
+    name: str = Field(
+        min_length=1,
+        max_length=100,
+    )
+    category: str | None = Field(
+        default=None,
+        max_length=100,
+    )
+    description: str | None = Field(
+        default=None,
+        max_length=500,
+    )
+
+
+class SkillResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    category: str | None
+    description: str | None
+    created_at: datetime
+
+
+class UserSkillCreate(BaseModel):
+    skill_id: int
+    proficiency: ProficiencyLevel = ProficiencyLevel.beginner
+
+
+class UserSkillUpdate(BaseModel):
+    proficiency: ProficiencyLevel
+
+class UserSkillResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    skill: SkillResponse
+    proficiency: ProficiencyLevel
     created_at: datetime
     updated_at: datetime
