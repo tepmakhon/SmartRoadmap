@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, get_current_user_for_update
 from app.core.security import verify_password
 from app.crud.user import (
     create_user_profile,
@@ -9,7 +9,6 @@ from app.crud.user import (
     get_user_by_email,
     get_user_by_username,
     get_user_profile,
-    revoke_all_user_refresh_tokens,
     update_user_email,
     update_user_profile,
     update_user_username,
@@ -23,7 +22,6 @@ from app.schemas.user import (
     UserProfileUpdate,
     UserResponse,
 )
-
 
 router = APIRouter(
     prefix="/api/v1/users",
@@ -43,7 +41,7 @@ def get_me(
 
 @router.delete("/me")
 def deactivate_account(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_for_update),
     db: Session = Depends(get_db),
 ):
     if not current_user.is_active:
@@ -57,10 +55,6 @@ def deactivate_account(
         current_user,
     )
 
-    revoke_all_user_refresh_tokens(
-        db,
-        current_user.id,
-    )
 
     return {
         "message": "Account deactivated successfully"
@@ -70,7 +64,7 @@ def deactivate_account(
 @router.post("/me/change-email")
 def change_email(
     email_data: ChangeEmailRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_for_update),
     db: Session = Depends(get_db),
 ):
     if email_data.new_email == current_user.email:
@@ -105,11 +99,6 @@ def change_email(
         email_data.new_email,
     )
 
-    # Invalidate existing sessions after changing email
-    revoke_all_user_refresh_tokens(
-        db,
-        current_user.id,
-    )
 
     return {
         "message": "Email changed successfully"
@@ -118,7 +107,7 @@ def change_email(
 @router.post("/me/change-username")
 def change_username(
     username_data: ChangeUsernameRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_for_update),
     db: Session = Depends(get_db),
 ):
     # Make sure the new username is different
@@ -157,11 +146,6 @@ def change_username(
         username_data.new_username,
     )
 
-    # Invalidate all existing refresh sessions
-    revoke_all_user_refresh_tokens(
-        db,
-        current_user.id,
-    )
 
     return {
         "message": "Username changed successfully"

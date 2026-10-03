@@ -1,10 +1,11 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, DateTime, Integer, String, text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.time import utcnow
 from app.models.base import Base
-from sqlalchemy.orm import relationship
+
 
 class User(Base):
     __tablename__ = "users"
@@ -44,16 +45,20 @@ class User(Base):
         nullable=False,
     )
 
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow,
+        default=utcnow,
         nullable=False,
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=utcnow,
+        onupdate=utcnow,
         nullable=False,
     )
 
@@ -69,3 +74,19 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+
+    goals = relationship(
+        "Goal", back_populates="user", cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+    topics = relationship("LearningTopic", back_populates="user", cascade="all, delete-orphan", passive_deletes=True)
+
+    roadmaps = relationship("Roadmap", back_populates="user", cascade="all, delete-orphan", passive_deletes=True)
+
+    projects = relationship("Project", back_populates="user", cascade="all, delete-orphan", passive_deletes=True)
+
+    assessments = relationship("SkillAssessment", back_populates="user", cascade="all, delete-orphan", passive_deletes=True)
+
+    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan", passive_deletes=True)

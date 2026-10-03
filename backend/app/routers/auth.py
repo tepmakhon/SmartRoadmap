@@ -1,47 +1,44 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.dependencies import get_current_user, get_current_user_for_update
 from app.core.security import (
     create_access_token,
     create_refresh_token,
+    hash_password,
     hash_refresh_token,
     verify_password,
 )
+from app.core.time import utcnow
 from app.crud.user import (
     create_refresh_token as save_refresh_token,
+)
+from app.crud.user import (
     create_user,
     get_refresh_token,
     get_user_by_email,
     get_user_by_id,
     get_user_by_username,
-    revoke_refresh_token,
+    get_user_refresh_tokens,
     revoke_all_user_refresh_tokens,
+    revoke_user_refresh_token,
+    update_user_password,
 )
 from app.db.database import get_db
+from app.models.user import User
 from app.schemas.user import (
+    ChangePasswordRequest,
+    LogoutRequest,
+    RefreshTokenRequest,
+    SessionResponse,
     Token,
     UserCreate,
     UserLogin,
     UserResponse,
-    RefreshTokenRequest,
-    LogoutRequest,
-    ChangePasswordRequest,
 )
-
-from app.core.dependencies import get_current_user
-from app.crud.user import (
-    get_user_refresh_tokens,
-    revoke_user_refresh_token,
-    revoke_all_user_refresh_tokens,
-)
-from app.schemas.user import SessionResponse
-from app.models.user import User
-
-from app.core.security import hash_password
-from app.crud.user import update_user_password
 
 router = APIRouter(
     prefix="/api/v1/auth",
@@ -99,6 +96,7 @@ def login(
     user = get_user_by_email(
         db,
         user_data.email,
+        lock=True,
     )
 
     if not user:
@@ -124,7 +122,7 @@ def login(
 
     # Access token
     access_token = create_access_token(
-        str(user.id)
+        str(user.id), token_version=user.token_version
     )
 
     # Raw refresh token
@@ -137,7 +135,7 @@ def login(
 
     # Refresh token expiration
     expires_at = (
-        datetime.utcnow()
+        utcnow()
         + timedelta(
             days=settings.REFRESH_TOKEN_EXPIRE_DAYS
         )
@@ -183,6 +181,23 @@ def refresh_access_token(
             detail="Invalid refresh token",
         )
 
+    # Find the user
+    user = get_user_by_id(
+        db,
+        refresh_token.user_id,
+        lock=True,
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    refresh_token = get_refresh_token(db, token_hash, lock=True)
+    if refresh_token is None:
+        raise HTTPException(401, "Invalid refresh token")
+
     # Make sure the token has not already been revoked
     if refresh_token.revoked_at is not None:
         revoke_all_user_refresh_tokens(
@@ -195,22 +210,10 @@ def refresh_access_token(
             detail="Refresh token reuse detected",
         )
     # Make sure the token has not expired
-    if refresh_token.expires_at <= datetime.utcnow():
+    if refresh_token.expires_at <= utcnow():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token has expired",
-        )
-
-    # Find the user
-    user = get_user_by_id(
-        db,
-        refresh_token.user_id,
-    )
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
         )
 
     if not user.is_active:
@@ -224,14 +227,11 @@ def refresh_access_token(
     # --------------------------------------------------
 
     # 1. Revoke old refresh token
-    revoke_refresh_token(
-        db,
-        refresh_token,
-    )
+    refresh_token.revoked_at = utcnow()
 
     # 2. Create new access token
     access_token = create_access_token(
-        str(user.id)
+        str(user.id), token_version=user.token_version
     )
 
     # 3. Create new raw refresh token
@@ -244,7 +244,7 @@ def refresh_access_token(
 
     # 5. Calculate new expiration
     expires_at = (
-        datetime.utcnow()
+        utcnow()
         + timedelta(
             days=settings.REFRESH_TOKEN_EXPIRE_DAYS
         )
@@ -284,12 +284,17 @@ def logout(
             detail="Invalid refresh token",
         )
 
+    get_user_by_id(db, refresh_token.user_id, lock=True)
+    refresh_token = get_refresh_token(db, token_hash, lock=True)
+    if refresh_token is None:
+        raise HTTPException(401, "Invalid refresh token")
+
     if refresh_token.revoked_at is not None:
         return {
             "message": "Already logged out"
         }
 
-    refresh_token.revoked_at = datetime.utcnow()
+    refresh_token.revoked_at = utcnow()
 
     db.commit()
 
@@ -302,15 +307,19 @@ def logout(
     response_model=list[SessionResponse],
 )
 def get_sessions(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     tokens = get_user_refresh_tokens(
         db,
         current_user.id,
+        offset,
+        limit,
     )
 
-    now = datetime.utcnow()
+    now = utcnow()
 
     return [
         SessionResponse(
@@ -370,7 +379,7 @@ def revoke_all_sessions(
 @router.post("/change-password")
 def change_password(
     password_data: ChangePasswordRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_for_update),
     db: Session = Depends(get_db),
 ):
     if not verify_password(
@@ -396,11 +405,6 @@ def change_password(
         db,
         current_user,
         hashed_password,
-    )
-
-    revoke_all_user_refresh_tokens(
-        db,
-        current_user.id,
     )
 
     return {

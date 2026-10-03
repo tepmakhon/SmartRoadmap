@@ -1,5 +1,5 @@
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.skill import Skill
 from app.models.user_skill import UserSkill
@@ -29,12 +29,18 @@ def get_skill_by_name(
 
 def get_skills(
     db: Session,
+    offset: int = 0,
+    limit: int = 50,
+    search: str | None = None,
 ) -> list[Skill]:
     statement = (
         select(Skill)
         .order_by(Skill.name.asc())
     )
 
+    if search:
+        statement = statement.where(Skill.name.contains(search, autoescape=True))
+    statement = statement.offset(offset).limit(limit)
     return list(db.scalars(statement).all())
 
 
@@ -103,11 +109,15 @@ def get_user_skill(
 def get_user_skills(
     db: Session,
     user_id: int,
+    offset: int = 0,
+    limit: int = 50,
 ) -> list[UserSkill]:
     statement = (
         select(UserSkill)
+        .options(selectinload(UserSkill.skill))
         .where(UserSkill.user_id == user_id)
-        .order_by(UserSkill.created_at.desc())
+        .order_by(UserSkill.created_at.desc(), UserSkill.id.desc())
+        .offset(offset).limit(limit)
     )
 
     return list(db.scalars(statement).all())

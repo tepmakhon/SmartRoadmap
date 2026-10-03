@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_admin_user, get_current_user
 from app.crud.skill import (
     create_skill,
     create_user_skill,
@@ -25,7 +25,6 @@ from app.schemas.user import (
     UserSkillUpdate,
 )
 
-
 router = APIRouter(
     prefix="/api/v1",
     tags=["Skills"],
@@ -42,9 +41,12 @@ router = APIRouter(
     response_model=list[SkillResponse],
 )
 def list_skills(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    search: str | None = Query(None, max_length=100),
     db: Session = Depends(get_db),
 ):
-    return get_skills(db)
+    return get_skills(db, offset, limit, search)
 
 
 @router.get(
@@ -71,6 +73,7 @@ def get_skill(
 
 @router.post(
     "/skills",
+    dependencies=[Depends(get_admin_user)],
     response_model=SkillResponse,
     status_code=status.HTTP_201_CREATED,
 )
@@ -99,6 +102,7 @@ def add_skill(
 
 @router.patch(
     "/skills/{skill_id}",
+    dependencies=[Depends(get_admin_user)],
     response_model=SkillResponse,
 )
 def edit_skill(
@@ -140,6 +144,7 @@ def edit_skill(
 
 @router.delete(
     "/skills/{skill_id}",
+    dependencies=[Depends(get_admin_user)],
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def remove_skill(
@@ -173,12 +178,16 @@ def remove_skill(
     response_model=list[UserSkillResponse],
 )
 def list_my_skills(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     return get_user_skills(
         db,
         current_user.id,
+        offset,
+        limit,
     )
 
 
