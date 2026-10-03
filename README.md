@@ -23,6 +23,7 @@ All private endpoints scope reads and writes to the authenticated owner. Topics 
 cd backend
 python3.13 -m venv .venv
 source .venv/bin/activate
+
 python -m pip install -r requirements-dev.txt
 cp .env.example .env
 ```
@@ -171,3 +172,15 @@ backend/
 compose.yaml
 .github/workflows/backend.yml
 ```
+
+
+## Frontend application
+
+The connected React/TypeScript frontend is in [`frontend/`](frontend/README.md). It includes the landing page, authenticated dashboard, account/profile settings, skills, goals and skill targets, topics and resources, manual/generated roadmaps, milestone/task management, progress, projects, assessments and recommendations.
+
+- Development: `cd frontend && npm ci && npm run dev` → http://127.0.0.1:5173 (proxies to the Docker API on port 8001).
+- Production container: `docker compose --env-file .env.docker up --build -d --wait` → http://127.0.0.1:3000.
+- API source of truth: [frontend implementation matrix](docs/frontend-matrix.md), with the actual OpenAPI snapshot and generated TypeScript types.
+- Frontend verification: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, and `npm run test:e2e` from `frontend/`. Browser tests use the real Compose backend and dedicated test data; see the frontend guide before running them.
+
+Frontend CI is defined in `.github/workflows/frontend.yml` and includes browser journeys through the production Nginx container.
